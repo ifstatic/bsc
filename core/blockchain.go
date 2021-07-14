@@ -88,7 +88,8 @@ const (
 	maxFutureBlocks     = 256
 	maxTimeFutureBlocks = 30
 	badBlockLimit       = 10
-	preLoadLimit        = 32
+	preLoadLimit        = 64
+	maxBeyondBlocks     = 2048
 
 	// BlockChainVersion ensures that an incompatible database forces a resync from scratch.
 	//
@@ -522,12 +523,17 @@ func (bc *BlockChain) SetHeadBeyondRoot(head uint64, root common.Hash) (uint64, 
 				// keeping rewinding until we exceed the optional threshold
 				// root hash
 				beyondRoot := (root == common.Hash{}) // Flag whether we're beyond the requested root (no root, always true)
-
+				enoughBeyondCount := false
+				beyondCount := 0
 				for {
+					beyondCount++
 					// If a root threshold was requested but not yet crossed, check
 					if root != (common.Hash{}) && !beyondRoot && newHeadBlock.Root() == root {
 						beyondRoot, rootNumber = true, newHeadBlock.NumberU64()
 					}
+
+					enoughBeyondCount = beyondCount > maxBeyondBlocks
+
 					if _, err := state.New(newHeadBlock.Root(), bc.stateCache, bc.snaps); err != nil {
 						log.Trace("Block state missing, rewinding further", "number", newHeadBlock.NumberU64(), "hash", newHeadBlock.Hash())
 						if pivot == nil || newHeadBlock.NumberU64() > *pivot {
@@ -543,7 +549,7 @@ func (bc *BlockChain) SetHeadBeyondRoot(head uint64, root common.Hash) (uint64, 
 							newHeadBlock = bc.genesisBlock
 						}
 					}
-					if beyondRoot || newHeadBlock.NumberU64() == 0 {
+					if beyondRoot || (enoughBeyondCount && root != common.Hash{}) || newHeadBlock.NumberU64() == 0 {
 						log.Debug("Rewound to block with state", "number", newHeadBlock.NumberU64(), "hash", newHeadBlock.Hash())
 						break
 					}
