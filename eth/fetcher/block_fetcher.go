@@ -372,6 +372,7 @@ func (f *BlockFetcher) loop() {
 			if f.light {
 				f.importHeaders(op.origin, op.header)
 			} else {
+				log.Info("===debug start importBlocks", "hash", op.block.Hash().String(), "height", op.block.NumberU64())
 				f.importBlocks(op.origin, op.block)
 			}
 		}
@@ -384,7 +385,7 @@ func (f *BlockFetcher) loop() {
 		case notification := <-f.notify:
 			// A block was announced, make sure the peer isn't DOSing us
 			blockAnnounceInMeter.Mark(1)
-
+			log.Info("===debug receive notify", "hash", notification.hash, "height", notification.number)
 			count := f.announces[notification.origin] + 1
 			if count > hashLimit {
 				log.Debug("Peer exceeded outstanding announces", "peer", notification.origin, "limit", hashLimit)
@@ -418,12 +419,13 @@ func (f *BlockFetcher) loop() {
 		case op := <-f.inject:
 			// A direct block insertion was requested, try and fill any pending gaps
 			blockBroadcastInMeter.Mark(1)
-
+			log.Info("===debug receive inject", "hash", op.block.Hash().String(), "height", op.block.NumberU64())
 			// Now only direct block injection is allowed, drop the header injection
 			// here silently if we receive.
 			if f.light {
 				continue
 			}
+			log.Info("===debug enqueue0", "hash", op.block.Hash().String(), "height", op.block.NumberU64())
 			f.enqueue(op.origin, nil, op.block)
 
 		case hash := <-f.done:
@@ -456,8 +458,7 @@ func (f *BlockFetcher) loop() {
 			}
 			// Send out all block header requests
 			for peer, hashes := range request {
-				log.Trace("Fetching scheduled headers", "peer", peer, "list", hashes)
-
+				log.Info("===debug Fetching scheduled headers", "peer", peer, "list", hashes)
 				// Create a closure of the fetch and schedule in on a new thread
 				fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
 				go func() {
@@ -490,7 +491,7 @@ func (f *BlockFetcher) loop() {
 			}
 			// Send out all block body requests
 			for peer, hashes := range request {
-				log.Trace("Fetching scheduled bodies", "peer", peer, "list", hashes)
+				log.Info("===debug Fetching scheduled bodies", "peer", peer, "list", hashes)
 
 				// Create a closure of the fetch and schedule in on a new thread
 				if f.completingHook != nil {
@@ -513,6 +514,9 @@ func (f *BlockFetcher) loop() {
 				return
 			}
 			headerFilterInMeter.Mark(int64(len(task.headers)))
+			for _, h := range task.headers {
+				log.Info("===debug receving headers", "hash", h.Hash().String(), "height", h.Number)
+			}
 
 			// Split the batch of headers into unknown ones (to return to the caller),
 			// known incomplete ones (requiring body retrievals) and completed blocks.
@@ -590,6 +594,7 @@ func (f *BlockFetcher) loop() {
 			// Schedule the header-only blocks for import
 			for _, block := range complete {
 				if announce := f.completing[block.Hash()]; announce != nil {
+					log.Info("===debug enqueue1", "hash", block.Hash().String(), "height", block.NumberU64())
 					f.enqueue(announce.origin, nil, block)
 				}
 			}
@@ -635,6 +640,7 @@ func (f *BlockFetcher) loop() {
 							block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i])
 							block.ReceivedAt = task.time
 							blocks = append(blocks, block)
+							log.Info("===debug receving block bodies", "hash", block.Hash().String(), "height", block.NumberU64())
 						} else {
 							f.forgetHash(hash)
 						}
@@ -657,6 +663,7 @@ func (f *BlockFetcher) loop() {
 			// Schedule the retrieved blocks for ordered import
 			for _, block := range blocks {
 				if announce := f.completing[block.Hash()]; announce != nil {
+					log.Info("===debug enqueue2", "hash", block.Hash().String(), "height", block.NumberU64())
 					f.enqueue(announce.origin, nil, block)
 				}
 			}

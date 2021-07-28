@@ -65,10 +65,14 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	// Consume any broadcasts and announces, forwarding the rest to the downloader
 	switch packet := packet.(type) {
 	case *eth.BlockHeadersPacket:
+		for _, h := range *packet {
+			log.Info("===debug receive raw header hash", "hash", h.Hash().String(), "number", h.Number.String())
+		}
 		return h.handleHeaders(peer, *packet)
 
 	case *eth.BlockBodiesPacket:
 		txset, uncleset := packet.Unpack()
+		log.Info("===debug receive raw BlockBodiesPacket")
 		return h.handleBodies(peer, txset, uncleset)
 
 	case *eth.NodeDataPacket:
@@ -85,9 +89,12 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 
 	case *eth.NewBlockHashesPacket:
 		hashes, numbers := packet.Unpack()
+		log.Info("===debug receive raw block hash", "hash", hashes, "number", numbers)
+
 		return h.handleBlockAnnounces(peer, hashes, numbers)
 
 	case *eth.NewBlockPacket:
+		log.Info("===debug receive raw whole block", "hash", packet.Block.Hash().String(), "height", packet.Block.NumberU64())
 		return h.handleBlockBroadcast(peer, packet.Block, packet.TD)
 
 	case *eth.NewPooledTransactionHashesPacket:
